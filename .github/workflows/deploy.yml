@@ -1,0 +1,33 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+            cd ~/practice-backend-ec2-and-ecs || git clone https://github.com/${{ github.repository }}.git ~/practice-backend-ec2-and-ecs
+            cd ~/practice-backend-ec2-and-ecs
+            git pull origin main
+
+            # Rebuild and restart Docker container
+            docker build -t practice-backend .
+            docker stop practice-backend || true
+            docker rm practice-backend || true
+            docker run -d -p 3000:3000 --env-file .env --name practice-backend practice-backend
+          EOF
+
