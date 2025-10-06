@@ -2,7 +2,8 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main  # or 'master' if that's your default branch
 
 jobs:
   deploy:
@@ -10,24 +11,32 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
       - name: Deploy to EC2
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
-            cd ~/practice-backend-ec2-and-ecs || git clone https://github.com/${{ github.repository }}.git ~/practice-backend-ec2-and-ecs
-            cd ~/practice-backend-ec2-and-ecs
-            git pull origin main
+          cd ~/my-backend || exit 1
 
-            # Rebuild and restart Docker container
-            docker build -t practice-backend .
-            docker stop practice-backend || true
-            docker rm practice-backend || true
-            docker run -d -p 3000:3000 --env-file .env --name practice-backend practice-backend
+          echo "Pulling latest code..."
+          git fetch origin main && git reset --hard origin/main
+
+          echo "Building Docker image..."
+          sudo docker build -t my-backend .
+
+          echo "Stopping old container..."
+          sudo docker stop backend || true
+          sudo docker rm backend || true
+
+          echo "Running new container..."
+          sudo docker run -d --name backend -p 3000:3000 my-backend
+
+          echo "✅ Deployment complete!"
           EOF
 
